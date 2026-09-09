@@ -79,11 +79,34 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	_, err = videoFile.Seek(0, io.SeekStart)
+	ratio, err := getVideoAspectRatio(videoFile.Name())
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Couldn't reset the temp videofile offset", err)
+		respondWithError(w, http.StatusInternalServerError, "Couldn't extract video ratio", err)
 		return
 	}
+	var ratioPrefix string
+	switch ratio {
+	case "16:9":
+		ratioPrefix = "landscape"
+	case "9:16":
+		ratioPrefix = "portrait"
+	case "other":
+		ratioPrefix = "other"
+	}
+
+	fastStartVideoFilePath, err := processVideoForFastStart(videoFile.Name())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't create fast start video", err)
+		return
+	}
+
+	fastStartVideoFile, err := os.Open(fastStartVideoFilePath)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't open fast start video", err)
+		return
+	}
+	defer os.Remove(fastStartVideoFile.Name())
+	defer fastStartVideoFile.Close()
 
 	src := make([]byte, 32)
 	_, err = rand.Read(src)
@@ -99,12 +122,12 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	fileKey := fmt.Sprintf("%s.%s", filenameBase, mediaFormat)
+	fileKey := fmt.Sprintf("%s/%s.%s", ratioPrefix, filenameBase, mediaFormat)
 
 	_, err = cfg.s3Client.PutObject(r.Context(), &s3.PutObjectInput{
 		Bucket:      &cfg.s3Bucket,
 		Key:         &fileKey,
-		Body:        videoFile,
+		Body:        fastStartVideoFile,
 		ContentType: &mediaType,
 	})
 	if err != nil {
