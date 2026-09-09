@@ -1,8 +1,11 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -46,14 +49,17 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 
 	defer file.Close()
 
-	mediaType := header.Header.Get("Content-Type")
+	mediaType, _, err := mime.ParseMediaType(header.Header.Get("Content-Type"))
 
-	// data, err := io.ReadAll(file)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't process media type properties", err)
+		return
+	}
 
-	// if err != nil {
-	// 	respondWithError(w, http.StatusInternalServerError, "Couldn't read multipart data", err)
-	// 	return
-	// }
+	if mediaType != "image/jpeg" && mediaType != "image/png" {
+		respondWithError(w, http.StatusBadRequest, "Invalid media format", err)
+		return
+	}
 
 	_, mediaFormat, ok := strings.Cut(mediaType, "/")
 
@@ -62,7 +68,12 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	filename := fmt.Sprintf("%s.%s", videoID.String(), mediaFormat)
+	randKey := make([]byte, 32)
+	rand.Read(randKey)
+
+	filenameBase := base64.RawURLEncoding.EncodeToString(randKey)
+
+	filename := fmt.Sprintf("%s.%s", filenameBase, mediaFormat)
 
 	fp := filepath.Join(cfg.assetsRoot, filename)
 
