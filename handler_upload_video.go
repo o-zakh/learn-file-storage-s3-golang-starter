@@ -135,7 +135,7 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	videoURL := fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", cfg.s3Bucket, cfg.s3Region, fileKey)
+	videoURL := fmt.Sprintf("https://%s.cloudfront.net/%s", cfg.s3CfDistribution, fileKey)
 
 	dbVideo.VideoURL = &videoURL
 
@@ -144,5 +144,40 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		respondWithError(w, http.StatusInternalServerError, "Couldn't update the videoURL in the database", err)
 		return
 	}
-	respondWithJSON(w, http.StatusOK, struct{}{})
+
+	// signedVideo, err := cfg.dbVideoToSignedVideo(dbVideo)
+	// if err != nil {
+	// 	respondWithError(w, http.StatusInternalServerError, "Failed to generate the video link", err)
+	// 	return
+	// }
+
+	respondWithJSON(w, http.StatusOK, dbVideo)
 }
+
+// func generatePresignedURL(s3Client *s3.Client, bucket, key string, expireTime time.Duration) (string, error) {
+// 	prClient := s3.NewPresignClient(s3Client)
+// 	presignedReq, err := prClient.PresignGetObject(context.Background(), &s3.GetObjectInput{
+// 		Bucket: &bucket,
+// 		Key:    &key,
+// 	}, s3.WithPresignExpires(expireTime))
+// 	if err != nil {
+// 		return "", err
+// 	}
+// 	return presignedReq.URL, nil
+// }
+
+// func (cfg apiConfig) dbVideoToSignedVideo(video database.Video) (database.Video, error) {
+// 	if video.VideoURL == nil {
+// 		return video, nil
+// 	}
+// 	bucket, key, ok := strings.Cut(*video.VideoURL, ",")
+// 	if !ok {
+// 		return database.Video{}, fmt.Errorf("Couldn't extract the bucket and key from the url")
+// 	}
+// 	newURL, err := generatePresignedURL(cfg.s3Client, bucket, key, 60*time.Minute)
+// 	if err != nil {
+// 		return database.Video{}, err
+// 	}
+// 	video.VideoURL = &newURL
+// 	return video, nil
+// }
